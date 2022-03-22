@@ -263,13 +263,12 @@ BOOLEAN EptSplit2Mto4K(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 PhysicalAddress
     {
         return TRUE;
     }
-    split = MallocSplitPageFromPagePoolList();              //从提前分配好的内存池中分配一块内存，vmvxrootmode IRQL较高 NT 分配内存较大概率拉跨
+    split = MallocSplitPageFromPagePoolList();              //从提前分配好的内存池中分配一块内存，vmx root mode IRQL较高 NT 分配内存较大概率拉跨
     if (split == NULL)
     {
         DbgPrintLog("Error: SplitBuffer Failed\n");
         return FALSE;
     }
-    RtlSecureZeroMemory(split, sizeof(VMM_EPT_DYNAMIC_SPLIT));
     CVVMX_State[ProcessNum].Splitbuffer = split;
     split->Entry = largepage;
     for (int i = 0; i < VMM_EPT_PML1E_COUNT; i++)
