@@ -187,6 +187,9 @@
 
 #define VMM_STACK_SIZE 0X8000
 
+
+#define VPIDTAG	0x1
+
 typedef struct _VMX_CPU
 {
     PVOID VMXON_Region;
@@ -255,8 +258,10 @@ EXTERN_C vmxcs_clear(DWORD64);
 EXTERN_C vmx_vmcall(DWORD64);
 EXTERN_C clear_cr4(DWORD64);
 EXTERN_C vmx_invept(ULONG64,ULONG64);
+EXTERN_C vmx_invvpid(ULONG64, ULONG64);
 ULONG64 AdjustControlBit(ULONG64 uRetVaule, ULONG64 msr);
 EXTERN_C VOID HandleExitRIP();
 
 #define DbgPrintLog(format,...) \
         DbgPrintEx(0,0,"Cvhv LOG: (%s,%d) | " format, __FUNCTION__,__LINE__,__VA_ARGS__);
+

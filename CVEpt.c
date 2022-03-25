@@ -6,6 +6,7 @@
 
 BOOLEAN CVInitEPT()
 {
+    KIRQL irql;
     ULONG CpuNumber  = KeGetCurrentProcessorNumberEx(NULL);
     for (int i = 0; i < CpuNumber; i++)
     {
@@ -59,7 +60,12 @@ BOOLEAN CVInitEPT()
         return FALSE;
     }
     InitializeListHead(&pEptState->DynamicSplitPoolList);
+    InitializeListHead(&pEptState->FakePagePoolList);
+    InitializeListHead(&pEptState->FakePageList);
+    KeInitializeSpinLock(&GLock);
+    KeAcquireSpinLock(&GLock, &irql);
     InitlizePagePoolForHook(3);
+    KeReleaseSpinLock(&GLock, irql);
     return TRUE;
 }
 BOOLEAN CVBuildMtrrMap()
@@ -288,25 +294,81 @@ BOOLEAN EptSplit2Mto4K(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 PhysicalAddress
     
     return TRUE;
 }
-BOOLEAN HandleEPTPageHook(P_EPT_QULIFICATION_TABLE PQ, ULONG64 phy) 
+BOOLEAN HandleEPTPageHook(P_EPT_QULIFICATION_TABLE PQ, ULONG64 phy,ULONG64 virtualaddr) 
 {
     
-    ULONG64 phyalign = PAGE_ALIGN(phy);
-    PPTE hookpagepte = EptGetPTEENTRY(pEptState->EptPageTable, phyalign);
-    if (hookpagepte == NULL)
-    {
+     ULONG64 phyalign = PAGE_ALIGN(phy);
+     PPTE hookpagepte = EptGetPTEENTRY(pEptState->EptPageTable, phyalign);
+     if (hookpagepte == NULL)
+     {
         DbgPrintLog("[!] Error: Try To Get PTE of hookpage Failed\n");
         return FALSE;
-    }
-    if (!PQ->ExecuteAble && PQ->Execute)
-    {
-        hookpagepte->Bits.exec_access_supervisor = 1;
-        InveptSingleContext(pEptState->EptPointer.all);
-        DbgPrintLog("[+] Set hookpage PFN = %llx exec access to 1\n",hookpagepte->Bits.PhyPagePFN);
-        return TRUE;
-    }
+     }
+     /// <summary>
+     PEPT_FAKE_PAGE fake_page = GetFakePage(phy);
+     if (fake_page ==NULL)
+     {
+         DbgPrintLog("[!] Error: Try To Fake Page For Hookitem Failed\n");
+         return FALSE;
+     }
+
+     if (!PQ->ExecuteAble && PQ->Execute)
+     {
+         fake_page->OriginalEntryAddress->all = fake_page->FakeEntryForX.all;
+         InveptSingleContext(pEptState->EptPointer.all);
+         DbgPrintLog("[+] Set hookpage PFN = %llx exec access to 1\n", hookpagepte->Bits.PhyPagePFN);
+         return TRUE;
+     }
+     if (PQ->ExecuteAble && (PQ->Read|PQ->Write))
+     {
+         fake_page->OriginalEntryAddress->all = fake_page->FakeEntryForRW.all;
+         InveptSingleContext(pEptState->EptPointer.all);
+         DbgPrintLog("[+] Set hookpage PFN = %llx read access to 1,write access to 1\n", hookpagepte->Bits.PhyPagePFN);
+         return TRUE;
+     }
+    /// <summary>
     return FALSE;
 }
+/// <summary>
+/// 
+/// </summary>
+/// <returns></returns>
+PEPT_FAKE_PAGE GetFakePage(ULONG64 phy) 
+{
+  
+    PLIST_ENTRY list = &pEptState->FakePageList;
+    while (list->Flink != &pEptState->FakePageList)
+    {
+        PEPT_FAKE_PAGE fakepagepool = (PEPT_FAKE_PAGE)CONTAINING_RECORD(list->Flink, EPT_FAKE_PAGE, POOL_LIST);
+        if (fakepagepool->PhyPFN == phy>>12)
+        {
+            return fakepagepool;
+        }
+        list = list->Flink;
+    }
+    return NULL;
+
+
+}
+
+PEPT_FAKE_PAGE MallocFakePageFromPagePoolList()
+{
+    PLIST_ENTRY list = &pEptState->FakePagePoolList;
+    while (list->Flink != &pEptState->FakePagePoolList)
+    {
+        PEPT_FAKE_PAGE_POOL fakepagepool = (PEPT_FAKE_PAGE_POOL)CONTAINING_RECORD(list->Flink, EPT_FAKE_PAGE_POOL, POOL_LIST);
+        if (fakepagepool->IsUsed == FALSE)
+        {
+            fakepagepool->IsUsed = TRUE;
+            return fakepagepool->eptfakepage;
+        }
+        list = list->Flink;
+    }
+    return NULL;
+
+}
+
+
 PVMM_EPT_DYNAMIC_SPLIT MallocSplitPageFromPagePoolList()
 {
     
@@ -335,6 +397,15 @@ VOID InitlizePagePoolForHook(int count)
         RtlZeroMemory(dynamic_split, sizeof(VMM_EPT_DYNAMIC_SPLIT));
         dynamic_split_pool->dynamicsplit = dynamic_split;
         dynamic_split_pool->IsUsed = FALSE;
+
         InsertHeadList(&pEptState->DynamicSplitPoolList, &dynamic_split_pool->POOL_LIST);
+
+        PEPT_FAKE_PAGE_POOL fakepagepool = (PEPT_FAKE_PAGE_POOL)ExAllocatePool(NonPagedPool, sizeof(EPT_FAKE_PAGE_POOL));
+        PEPT_FAKE_PAGE fakepage = (PEPT_FAKE_PAGE)ExAllocatePool(NonPagedPool, sizeof(EPT_FAKE_PAGE));
+        RtlZeroMemory(fakepagepool, sizeof(EPT_FAKE_PAGE_POOL));
+        RtlZeroMemory(fakepage, sizeof(EPT_FAKE_PAGE));
+        fakepagepool->eptfakepage = fakepage;
+        fakepagepool->IsUsed = FALSE;
+        InsertHeadList(&pEptState->FakePagePoolList, &fakepagepool->POOL_LIST);
     }
 }

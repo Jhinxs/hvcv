@@ -139,6 +139,9 @@
     <ClCompile>
       <TreatWarningAsError>false</TreatWarningAsError>
     </ClCompile>
+    <Link>
+      <AdditionalDependencies>LDE64x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />
@@ -153,6 +156,7 @@
     <ClCompile Include="CVvmutil.c" />
     <ClCompile Include="hook.c" />
     <ClCompile Include="selector.c" />
+    <ClCompile Include="SSDT.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
@@ -165,7 +169,9 @@
     <ClInclude Include="CVvmexitEntry.h" />
     <ClInclude Include="CVvmutil.h" />
     <ClInclude Include="hook.h" />
+    <ClInclude Include="lde64.h" />
     <ClInclude Include="selector.h" />
+    <ClInclude Include="SSDT.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="CVasm.asm" />

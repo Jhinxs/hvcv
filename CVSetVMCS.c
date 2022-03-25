@@ -105,8 +105,9 @@ NTSTATUS CVSetUpVMXCS(ULONG64 GuestStack)
     if (Global_CVEnableEPT && CVVMX_State[CpuNumber].InitEPT && pEptState->EptPointer.all !=0)
     {       
             Interceptions |= VM_SECONDARY_EXEC_ENABLE_EPT;
-           // Interceptions |= VM_SECONDARY_EXEC_ENABLE_VPID;
+            Interceptions |= VM_SECONDARY_EXEC_ENABLE_VPID;
             __vmx_vmwrite(SECONDARY_VM_EXEC_CONTROL, Interceptions);
+            __vmx_vmwrite(VIRTUAL_PROCESSOR_ID, VPIDTAG);
             __vmx_vmwrite(EPT_POINTER, pEptState->EptPointer.all);
             DbgPrintLog("[+] Enable EPT On CPU[%d]\n", CpuNumber);
     }

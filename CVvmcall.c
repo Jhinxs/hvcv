@@ -1,7 +1,6 @@
 #include "CVvmcall.h"
 
-
-VOID DealVmcall(ULONG64 VMCALL_ARG, ULONG64 OptionalParam1)
+VOID DealVmcall(ULONG64 VMCALL_ARG, ULONG64 OptionalParam1, PVOID HookFunction, PVOID* OrigFunction)
 {
 
 	switch (VMCALL_ARG)
@@ -10,9 +9,12 @@ VOID DealVmcall(ULONG64 VMCALL_ARG, ULONG64 OptionalParam1)
 		CVVmxOff();
 		break;
 
-	case VMCALL_HOOK_EPT_PAGE:
-		CVHOOKFromRegularMode(OptionalParam1, TRUE);
-		break;
+	case VMCALL_HOOK_EPT_PAGE: 
+	{
+		ULONG64 targetFunc = OptionalParam1;
+		CVHOOKFromRegularMode(targetFunc, HookFunction, OrigFunction, TRUE);
+		break; 
+	}
 
 	case VMCALL_INVEPT_SINGLE_CONTEXT:
 		InveptSingleContext(OptionalParam1);
@@ -32,10 +34,20 @@ VOID DealVmcall(ULONG64 VMCALL_ARG, ULONG64 OptionalParam1)
 VOID InveptSingleContext(ULONG64 EptPointer)
 {
 	INVEPT_DESCRIPTOR Descriptor = { EptPointer ,0 };
-	return vmx_invept(SINGLE_CONTEXT, &Descriptor);
+	return vmx_invept( VEPT_SINGLE_CONTEXT, &Descriptor);
 }
 
 VOID InveptAllContexts()
 {
-	return vmx_invept(ALL_CONTEXTS, NULL);
+	return vmx_invept(VEPT_ALL_CONTEXTS, NULL);
+}
+
+VOID InvvpidAllContexts()
+{
+	return vmx_invvpid(VPID_ALL_CONTEXT, NULL);
+}
+VOID InvvpidSingleContext(int vpid) 
+{
+	INVVPID_DESCRIPTOR Descriptor = { vpid ,0 };
+	return vmx_invvpid(VPID_SINGLE_CONTEXT, &Descriptor);
 }

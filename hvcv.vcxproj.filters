@@ -46,6 +46,9 @@
     <ClCompile Include="CVEventInject.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SSDT.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">
@@ -79,6 +82,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="CVEventInject.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SSDT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lde64.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

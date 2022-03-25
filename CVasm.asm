@@ -458,6 +458,12 @@ vmx_invept proc
      ret
 vmx_invept endp
 
+vmx_invvpid proc
+    
+    invvpid rcx,oword ptr [rdx]
+    ret
+vmx_invvpid endp
+
 clear_cr4 proc
        
         mov rax,rcx

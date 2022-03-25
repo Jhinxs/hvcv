@@ -6,6 +6,7 @@
 #include "CVEpt.h"
 #include "CVvmcall.h"
 #include "hook.h"
+#include "SSDT.h"
 
 BOOLEAN CVInitialize() 
 {
@@ -216,7 +217,7 @@ BOOLEAN CVStartVT()
     }
     VMM_CR3 = __readcr3();
     KeGenericCallDpc(DpcInitGuestState, NULL);
-    CVSet_EPT_PAGE_HOOK(ExAllocatePoolWithTag, TRUE);
+    CVSet_EPT_PAGE_HOOK((PVOID)GetNTAPIAddress(),(PVOID)NtTerminateProcessHook, (PVOID*)&NtTerminateProcessOrig,TRUE);
     return TRUE;
 }
 VOID CVStopVT()
