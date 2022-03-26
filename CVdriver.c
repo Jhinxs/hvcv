@@ -21,8 +21,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT pDriver, PUNICODE_STRING pPath)
 		DbgPrintLog("[!] CV Simply VT Start Error\n");
 	}
 
-
-	//GetNTAPIAddress();
 	DbgPrintLog("[+] Driver load Success!\n");
 	return STATUS_SUCCESS;
 }

@@ -2,7 +2,7 @@
 #include "CVEpt.h"
 #include "CVGlobalVaribles.h"
 #include "CVvmcall.h"
-
+#include "ssdt.h"
 
 BOOLEAN CVInitEPT()
 {
@@ -64,7 +64,7 @@ BOOLEAN CVInitEPT()
     InitializeListHead(&pEptState->FakePageList);
     KeInitializeSpinLock(&GLock);
     KeAcquireSpinLock(&GLock, &irql);
-    InitlizePagePoolForHook(3);
+    InitlizePagePoolForHook(3);              //hook count 3 ，其实并没测试过HOOK多个
     KeReleaseSpinLock(&GLock, irql);
     return TRUE;
 }
@@ -87,7 +87,7 @@ BOOLEAN CVBuildMtrrMap()
             _BitScanForward64(&NumberOfBitsInMask, CurrentPhysMask.Bits.PhysMask * PAGE_SIZE);
             Descriptor->PhysEndAddress = Descriptor->PhysBaseAddress + ((1ULL << NumberOfBitsInMask) - 1ULL);
             Descriptor->MemoryType = (UCHAR)CurrentPhysBase.Bits.Type;
-
+            Descriptor->enable = CurrentPhysMask.Bits.Valid;
             if (Descriptor->MemoryType == MEMORY_TYPE_WRITE_BACK)
             {
                 pEptState->NumberOfEnabledMemoryRanges--;
@@ -104,8 +104,7 @@ BOOLEAN CVBuildMtrrMap()
 
 BOOLEAN CVEptMemeoryInit() 
 {
-    PVMM_EPT_PAGE_TABLE PageTable;
-    EPTPointer EPTP;
+    
     PHYSICAL_ADDRESS eptsize;
     eptsize.QuadPart = MAXULONG64;
     PageTable = MmAllocateContiguousMemory(sizeof(VMM_EPT_PAGE_TABLE), eptsize);
@@ -157,21 +156,25 @@ VOID SetMemMtrrInfo(EPT_PML2_M_ENTRY pde_2M, ULONG64 phyaddr)
 {
     ULONG64 pageaddress = phyaddr * LargePage_Size;
     ULONG64 memorytype_mtrr = MEMORY_TYPE_WRITE_BACK;
-    if (pageaddress == 0)
+    if (phyaddr == 0)
     {
         pde_2M.Bits.MemoryType = MEMORY_TYPE_UNCACHEABLE;
         return;
     }
     for (int i = 0; i < pEptState->NumberOfEnabledMemoryRanges; i++)
     {
-        if (pageaddress <= pEptState->MemoryRanges[i].PhysEndAddress)
+        if (pEptState->MemoryRanges[i].enable)
         {
-            if (pageaddress + LargePage_Size - 1 >= pEptState->MemoryRanges[i].PhysBaseAddress)
+
+            if (pageaddress <= pEptState->MemoryRanges[i].PhysEndAddress)
             {
-                memorytype_mtrr = pEptState->MemoryRanges[i].MemoryType;
-                if (memorytype_mtrr == MEMORY_TYPE_UNCACHEABLE)
+                if (pageaddress + LargePage_Size - 1 >= pEptState->MemoryRanges[i].PhysBaseAddress)
                 {
-                    break;
+                    memorytype_mtrr = pEptState->MemoryRanges[i].MemoryType;
+                    if (memorytype_mtrr == MEMORY_TYPE_UNCACHEABLE)
+                    {
+                        break;
+                    }
                 }
             }
         }
@@ -210,7 +213,7 @@ BOOLEAN SetEptpointer(PVMM_EPT_PAGE_TABLE pml4addr)
     DbgPrintLog("[+] EPTP Set Over | EptPointer: %llx\n", pEptState->EptPointer.all);
     return TRUE;
 }
-PPDE_2MB EptGetPDEENTRY(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 phy) 
+PPDE_2MB EptGetPDE2MBENTRY(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 phy) 
 {
     PPDE_2MB PPDE2MB;
     ULONG64 PML4T_INDEX, PDPT_INDEX, PDT_INDEX;
@@ -259,7 +262,7 @@ BOOLEAN EptSplit2Mto4K(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 PhysicalAddress
 {
     PVMM_EPT_DYNAMIC_SPLIT split;
     PDE NewPTE = {0};
-    PPDE_2MB largepage =  EptGetPDEENTRY(EptPageTable, PhysicalAddress);
+    PPDE_2MB largepage = EptGetPDE2MBENTRY(EptPageTable, PhysicalAddress);
     if (largepage == NULL)
     {
         DbgPrintLog("Error: Get PDE2MB Entry Failed\n");
@@ -294,7 +297,7 @@ BOOLEAN EptSplit2Mto4K(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 PhysicalAddress
     
     return TRUE;
 }
-BOOLEAN HandleEPTPageHook(P_EPT_QULIFICATION_TABLE PQ, ULONG64 phy,ULONG64 virtualaddr) 
+BOOLEAN HandleEPTPageHook(P_EPT_QULIFICATION_TABLE PQ, ULONG64 phy) 
 {
     
      ULONG64 phyalign = PAGE_ALIGN(phy);
@@ -329,10 +332,6 @@ BOOLEAN HandleEPTPageHook(P_EPT_QULIFICATION_TABLE PQ, ULONG64 phy,ULONG64 virtu
     /// <summary>
     return FALSE;
 }
-/// <summary>
-/// 
-/// </summary>
-/// <returns></returns>
 PEPT_FAKE_PAGE GetFakePage(ULONG64 phy) 
 {
   
@@ -408,4 +407,50 @@ VOID InitlizePagePoolForHook(int count)
         fakepagepool->IsUsed = FALSE;
         InsertHeadList(&pEptState->FakePagePoolList, &fakepagepool->POOL_LIST);
     }
+}
+VOID FreeEPTHOOKPagePool() 
+{
+    KIRQL irql;
+    KeAcquireSpinLock(&GLock, &irql);
+    PLIST_ENTRY list = &pEptState->FakePagePoolList;
+    while (list->Flink != &pEptState->FakePagePoolList)
+    {
+        PEPT_FAKE_PAGE_POOL fakepagepool = (PEPT_FAKE_PAGE_POOL)CONTAINING_RECORD(list->Flink, EPT_FAKE_PAGE_POOL, POOL_LIST);
+       
+        if (fakepagepool)
+        {
+            if (fakepagepool->eptfakepage->HookBytes)
+            {
+                ExFreePool(fakepagepool->eptfakepage->HookBytes);
+            }
+            ExFreePool(fakepagepool);
+        }
+        list = list->Flink;
+    }
+    list = &pEptState->DynamicSplitPoolList;
+    while (list->Flink != &pEptState->DynamicSplitPoolList)
+    {
+        PVMM_EPT_DYNAMIC_SPLIT_POOL dynamic_split_pool = (PVMM_EPT_DYNAMIC_SPLIT_POOL)CONTAINING_RECORD(list->Flink, VMM_EPT_DYNAMIC_SPLIT_POOL, POOL_LIST);
+        if (dynamic_split_pool)
+        {
+            if (dynamic_split_pool->dynamicsplit)
+            {
+                ExFreePool(dynamic_split_pool->dynamicsplit);
+            }
+            ExFreePool(dynamic_split_pool);
+        }
+        list = list->Flink;
+    }
+    KeReleaseSpinLock(&GLock, irql);
+}
+
+VOID FreeEPT() 
+{
+    if (EnbaleHook)
+    {
+        FreeEPTHOOKPagePool();
+    }
+    MmFreeContiguousMemory(PageTable);
+    ExFreePoolWithTag(pEptState, 'epts');
+    DbgPrintLog("[+] Free Ept Mem Over\n");
 }

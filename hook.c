@@ -1,25 +1,18 @@
 #include "hook.h"
 #include "lde64.h"
 
-BOOLEAN CVSet_EPT_PAGE_HOOK(PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction,BOOLEAN vmlaunch)
+BOOLEAN CVSet_EPT_PAGE_HOOK_INVM(PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction,BOOLEAN vmlaunch)
 {
-
+	/*
+	   用于在vmlaunch之后启用hook
+	*/
     ULONG CpuNumber = KeGetCurrentProcessorNumberEx(NULL);
 	if (vmlaunch)
 	{
-		    vmx_vmcall(VMCALL_HOOK_EPT_PAGE, TargetFunction, HookFunction, OrigFunction);
-			DbgPrintLog("[+] HOOK From VM-ROOT\n");
-			CVKeInvalidateEpt();
-			return TRUE;
-		
-	}
-	else
-	{
-		if (CVHOOKFromRegularMode(TargetFunction, HookFunction, OrigFunction, vmlaunch))
-		{
-			DbgPrintLog("[+] HOOK From Regular Kernel Mode\n");
-			return TRUE;
-		}
+		vmx_vmcall(VMCALL_HOOK_EPT_PAGE, TargetFunction, HookFunction, OrigFunction);
+		DbgPrintLog("[+] HOOK From VM-ROOT\n");
+		CVKeInvalidateEpt();
+		return TRUE;
 	}
 	DbgPrintLog("[!] HOOK Not Apply !\n");
 	return FALSE;
@@ -39,7 +32,7 @@ VOID CVInvalidateEptByVmcall(ULONG64 EptContext)
 		vmx_vmcall(VMCALL_INVEPT_SINGLE_CONTEXT, EptContext);
 	}
 }
-BOOLEAN CVHOOKFromRegularMode(PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction, BOOLEAN vmlaunch)
+BOOLEAN CVSet_EPT_PAGE_HOOK(PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction, BOOLEAN vmlaunch)
 {
 	KIRQL irql;
 	PVOID VirtualTarget;
@@ -72,8 +65,10 @@ BOOLEAN CVHOOKFromRegularMode(PVOID TargetFunction, PVOID HookFunction, PVOID* O
 	}
 	RtlCopyMemory(&Fake_Page_Entry->FakePageCode[0], VirtualTarget, PAGE_SIZE);
 
+	Fake_Page_Entry->VirtualAddress = TargetFunction;
 	Fake_Page_Entry->PhyAddr = PAGE_ALIGN(phyaddress);
 	Fake_Page_Entry->PhyPFN = phyaddress >> 12;
+
 	Fake_Page_Entry->FakeEntryForX.Bits.read_access = 0;
 	Fake_Page_Entry->FakeEntryForX.Bits.write_access = 0;
 	Fake_Page_Entry->FakeEntryForX.Bits.exec_access_supervisor = 1;
@@ -93,46 +88,47 @@ BOOLEAN CVHOOKFromRegularMode(PVOID TargetFunction, PVOID HookFunction, PVOID* O
 		DbgPrintLog("HvEptAddPageHook: Could not build hook.\n");
 		return FALSE;
 	}
-
+	Fake_Page_Entry->OriginalEntryBak = TargetPage;                        //用来移除hook
 	Fake_Page_Entry->OriginalEntryAddress = TargetPage;
-	TargetPage->Bits.read_access = 1;
-	TargetPage->Bits.write_access = 1;
+	TargetPage->Bits.read_access = 0;
+	TargetPage->Bits.write_access = 0;
 	TargetPage->Bits.exec_access_supervisor = 0;
 	if (vmlaunch)
 	{
 		InveptSingleContext(pEptState->EptPointer.all);
 	}
+	DbgPrintLog("[+] Set Hook For %llx Success\n", TargetFunction);
 	return TRUE;
 }
 BOOLEAN CVEptHookBuild(PEPT_FAKE_PAGE Hook, PVOID TargetFunction, PVOID HookFunction, PVOID* OrigFunction)
 {
 	ULONG64 InstructionSkipped = 0;;
 	ULONG64 PageOffset;
-	PCHAR HookBytes;
+	
 	PageOffset = ADDRMASK_EPT_PML1_OFFSET((ULONG64)TargetFunction);
 	if ((PageOffset + 12) > PAGE_SIZE - 1)
 	{
 		DbgPrintLog("[!] Offset spanned a page,Not Solved\n");
 		return FALSE;
 	}
-	for (int i = 0; i < 12; i++)
+	for (InstructionSkipped; InstructionSkipped < 12; InstructionSkipped++)
 	{
 		InstructionSkipped += LDE((PCHAR)TargetFunction + InstructionSkipped, 64);
 	}
+	DbgPrintLog("Number of bytes of InstructionSkipped: %d\n", InstructionSkipped);
+	Hook->HookBytes = (PCHAR)ExAllocatePool(NonPagedPool, InstructionSkipped + 12);
 
-	DbgPrintLog("Number of bytes of instruction mem: %d\n", InstructionSkipped);
-	HookBytes = (PCHAR)ExAllocatePool(NonPagedPool, InstructionSkipped + 12);
-
-	if (!HookBytes)
+	if (!Hook->HookBytes)
 	{
 		DbgPrintLog("Could not allocate trampoline function buffer.\n");
 		return FALSE;
 	}
 
-	RtlCopyMemory(HookBytes, TargetFunction, InstructionSkipped);
-	CVEptMakeHookJumpBytes(&HookBytes[InstructionSkipped], (ULONG64)TargetFunction + InstructionSkipped);
-	*OrigFunction = HookBytes;
+	RtlCopyMemory(Hook->HookBytes, TargetFunction, InstructionSkipped);
+	CVEptMakeHookJumpBytes(&Hook->HookBytes[InstructionSkipped], (ULONG64)TargetFunction + InstructionSkipped);
+	*OrigFunction = Hook->HookBytes;
 	CVEptMakeHookJumpBytes(&Hook->FakePageCode[PageOffset], (ULONG64)HookFunction);
+	Hook->IsHook = TRUE;
 	return TRUE;
 }
 
@@ -150,6 +146,32 @@ VOID CVEptMakeHookJumpBytes(PCHAR TargetBuffer, ULONG64 TargetAddress)
 	TargetBuffer[11] = 0xE0;
 }
 
+VOID CVRemoveHookOnStop() 
+{
+	KIRQL irql;
+	KeAcquireSpinLock(&GLock, &irql);
+	PLIST_ENTRY list = &pEptState->FakePagePoolList;
+	while (list->Flink != &pEptState->FakePagePoolList)
+	{
+		PEPT_FAKE_PAGE_POOL fakepagepool = (PEPT_FAKE_PAGE_POOL)CONTAINING_RECORD(list->Flink, EPT_FAKE_PAGE_POOL, POOL_LIST);
+
+		if (fakepagepool)
+		{
+			if (fakepagepool->eptfakepage->IsHook)
+			{
+				fakepagepool->eptfakepage->OriginalEntryAddress = fakepagepool->eptfakepage->OriginalEntryBak;
+				fakepagepool->eptfakepage->OriginalEntryAddress->Bits.read_access = 1;
+				fakepagepool->eptfakepage->OriginalEntryAddress->Bits.write_access = 1;
+				fakepagepool->eptfakepage->OriginalEntryAddress->Bits.exec_access_supervisor = 1;
+
+			}
+		}
+		list = list->Flink;
+	}
+	KeReleaseSpinLock(&GLock, irql);
+	DbgPrintLog("[+] Remove All Hook Over\n");
+}
+
 NTSTATUS NtTerminateProcessHook(
 	HANDLE            ProcessHandle,
 	NTSTATUS           ExitStatus
@@ -165,12 +187,12 @@ NTSTATUS NtTerminateProcessHook(
 		{
 			if (ProcessHandle == (HANDLE)0xffffffffffffffff)
 			{
-				return NtTerminateProcessOrig(ProcessHandle, ExitStatus);
+				return ((PNtTerminateProcess)NtTerminateProcessRetOrig)(ProcessHandle, ExitStatus);
 			}
 			return STATUS_ACCESS_DENIED;
 		}
 		ObDereferenceObject(pe);
 	}
-	return NtTerminateProcessOrig(ProcessHandle, ExitStatus);
+	return ((PNtTerminateProcess)NtTerminateProcessRetOrig)(ProcessHandle, ExitStatus);
 		
 }

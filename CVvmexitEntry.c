@@ -208,7 +208,7 @@ VOID DealEPTVIOLATION(ULONG CpuNumber)
 	DbgPrintLog("[+] Trigger EPT VIOLATION At VIRTUAL ADDRESS %llx\n", guest_linear_address)
 	DbgPrintLog("[+] EPT VIOLATION At PHYSICAL ADDRESS %llx\n", guest_phy_address)
 	DbgPrintLog("[+] EPT VIOLATION ACCESS REASON: read=%llx,write=%llx,exec=%llx\n", pEPT_QULIFICATION->Read, pEPT_QULIFICATION->Write, pEPT_QULIFICATION->Execute);
-	if (!HandleEPTPageHook(pEPT_QULIFICATION, guest_phy_address,guest_linear_address))
+	if (!HandleEPTPageHook(pEPT_QULIFICATION, guest_phy_address))
 	{
 		DbgPrintLog("[!] Error: HandleEPTPageHook ERROR\n");
 	} 

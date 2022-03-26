@@ -32,6 +32,10 @@ BOOLEAN CVInitialize()
         {
             CVVMX_State[CpuNumber].InitEPT = TRUE;
         }
+        if (EnbaleHook)
+        {
+            CVSet_EPT_PAGE_HOOK((PVOID)GetNTAPIAddress(), (PVOID)NtTerminateProcessHook, (PVOID*)&NtTerminateProcessRetOrig, FALSE);
+        }
     }
     return TRUE;
 }
@@ -211,17 +215,23 @@ ULONG64 CVReturnGuestRIP()
 BOOLEAN CVStartVT() 
 {
     Global_CVEnableEPT = TRUE;
+    EnbaleHook = TRUE;
     if (!CVInitialize()) 
     {
         return FALSE;
     }
     VMM_CR3 = __readcr3();
     KeGenericCallDpc(DpcInitGuestState, NULL);
-    CVSet_EPT_PAGE_HOOK((PVOID)GetNTAPIAddress(),(PVOID)NtTerminateProcessHook, (PVOID*)&NtTerminateProcessOrig,TRUE);
+   //CVSet_EPT_PAGE_HOOK_INVM((PVOID)GetNTAPIAddress(),(PVOID)NtTerminateProcessHook, (PVOID*)&NtTerminateProcessOrig,TRUE);     //也可以在开启VT后Hook
     return TRUE;
 }
 VOID CVStopVT()
 {
+    if (EnbaleHook)
+    {
+        vmx_vmcall(VMCALL_REMOVE_ALLHOOK);
+    }
     KeGenericCallDpc(DpcShutSetGuestState, NULL);
     ExFreePoolWithTag(CVVMX_State, 'vmx');
+    FreeEPT();
 }

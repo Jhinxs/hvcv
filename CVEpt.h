@@ -275,6 +275,7 @@ typedef struct _MTRR_RANGE_DESCRIPTOR
 	SIZE_T PhysBaseAddress;
 	SIZE_T PhysEndAddress;
 	UCHAR MemoryType;
+	UINT32 enable;
 } MTRR_RANGE_DESCRIPTOR, * PMTRR_RANGE_DESCRIPTOR;
 
 
@@ -482,7 +483,7 @@ typedef struct _EPT_FAKE_PAGE
 	ULONG64 PhyPFN;
 	ULONG64 PhysicalBaseAddressOfFakePageContents;
 	PPTE OriginalEntryAddress;
-	PTE OriginalEntry;
+	PPTE OriginalEntryBak;
 	PTE FakeEntryForRW;
 	PTE FakeEntryForX;
 	BOOLEAN IsHook;
@@ -499,10 +500,10 @@ typedef struct _EPT_FAKE_PAGE_POOL
 
 PPML4E _pPML4E;
 PPDPTE _pPDPTE;
-
+PVMM_EPT_PAGE_TABLE PageTable;
 PEPT_STATE pEptState;
 KSPIN_LOCK GLock;
-
+BOOLEAN EnbaleHook;
 
 BOOLEAN SetEptpointer(PVMM_EPT_PAGE_TABLE);
 BOOLEAN CVInitEPT();
@@ -511,11 +512,13 @@ BOOLEAN CVBuildMtrrMap();
 VOID SetMemMtrrInfo(EPT_PML2_M_ENTRY, ULONG64);
 
 
-PPDE_2MB EptGetPDEENTRY(PVMM_EPT_PAGE_TABLE EptPageTable,ULONG64 phy);
+PPDE_2MB EptGetPDE2MBENTRY(PVMM_EPT_PAGE_TABLE EptPageTable,ULONG64 phy);
 PPTE EptGetPTEENTRY(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 phy);
 BOOLEAN EptSplit2Mto4K(PVMM_EPT_PAGE_TABLE EptPageTable, ULONG64 PhysicalAddress, ULONG CoreIndex);
-BOOLEAN HandleEPTPageHook(P_EPT_QULIFICATION_TABLE PQ, ULONG64 phy,ULONG64 virtuladdr);
+BOOLEAN HandleEPTPageHook(P_EPT_QULIFICATION_TABLE PQ, ULONG64 phy);
 PVMM_EPT_DYNAMIC_SPLIT MallocSplitPageFromPagePoolList();
 PEPT_FAKE_PAGE MallocFakePageFromPagePoolList();
 VOID InitlizePagePoolForHook(int count);
 PEPT_FAKE_PAGE GetFakePage(ULONG64 phy);
+VOID FreeEPT();
+VOID FreeEPTHOOKPagePool();

@@ -6,13 +6,17 @@ VOID DealVmcall(ULONG64 VMCALL_ARG, ULONG64 OptionalParam1, PVOID HookFunction, 
 	switch (VMCALL_ARG)
 	{
 	case VMCALL_VMXOFF:
+		
 		CVVmxOff();
 		break;
+	case VMCALL_REMOVE_ALLHOOK:
 
+		CVRemoveHookOnStop();
+		break;
 	case VMCALL_HOOK_EPT_PAGE: 
 	{
 		ULONG64 targetFunc = OptionalParam1;
-		CVHOOKFromRegularMode(targetFunc, HookFunction, OrigFunction, TRUE);
+		CVSet_EPT_PAGE_HOOK(targetFunc, HookFunction, OrigFunction, TRUE);
 		break; 
 	}
 

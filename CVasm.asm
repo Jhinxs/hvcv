@@ -380,17 +380,17 @@ vmx_vmmhostentry proc
     push rdx
     push rcx
     push rax
-	
+    
 
 	mov rcx, rsp		;GuestRegs
-	sub	rsp, 28h
+	sub	rsp, 20h
 	call VmhostEntrydbg	
-	add	rsp, 28h
+	add	rsp, 20h
 
-    
     cmp rax,1
     je vmxoffHandler
     
+
     pop rax
     pop rcx
     pop rdx
@@ -413,7 +413,6 @@ vmx_vmmhostentry proc
 vmx_vmmhostentry endp
 
 vmxoffHandler PROC
-   
     
     pop rax
     pop rcx
