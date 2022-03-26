@@ -181,7 +181,6 @@ NTSTATUS NtTerminateProcessHook(
 	NTSTATUS status = ObReferenceObjectByHandle(ProcessHandle, PROCESS_ALL_ACCESS, *PsProcessType, KernelMode, &pe, NULL);
 	if (status == STATUS_SUCCESS)
 	{
-		KIRQL irql = KeGetCurrentIrql();
 		char* processname = PsGetProcessImageFileName(pe);
 		if (strcmp(processname, "notepad.exe") ==0)
 		{
