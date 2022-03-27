@@ -3,7 +3,7 @@
 
 ULONG64* GetSSDTBase()
 {
-	//暂时不考虑KVAS
+	//先不考虑  KVAS
 	ULONG64 lstar = __readmsr(0xC0000082);
 	for (int i = 0; i < 1024; i++)
 	{
@@ -28,7 +28,7 @@ ULONG64* GetSSDTBase()
 }
 ULONG64 GetNTAPIAddress() 
 {
-	int SyscallNumber = 0x002c;     //NtOpenProcess = 0x0026;
+	int SyscallNumber = 0x002c;     //NtTerminateProcess = 0x0026;
 	ULONG64* ssdt = GetSSDTBase();
 	ULONG64 address = ((*(ULONG*)(*ssdt + SyscallNumber * 4)) >> 4) + *ssdt;
 	return address;
