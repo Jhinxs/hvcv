@@ -214,8 +214,8 @@ ULONG64 CVReturnGuestRIP()
 
 BOOLEAN CVStartVT() 
 {
-    Global_CVEnableEPT = TRUE;
-    EnbaleHook = TRUE;
+    Global_CVEnableEPT = FALSE;
+    EnbaleHook = FALSE;
     if (!CVInitialize()) 
     {
         return FALSE;

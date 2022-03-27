@@ -6,6 +6,10 @@
 
 BOOLEAN CVInitEPT()
 {
+    if (!Global_CVEnableEPT)
+    {
+        return FALSE;
+    }
     KIRQL irql;
     ULONG CpuNumber  = KeGetCurrentProcessorNumberEx(NULL);
     for (int i = 0; i < CpuNumber; i++)
@@ -446,6 +450,10 @@ VOID FreeEPTHOOKPagePool()
 
 VOID FreeEPT() 
 {
+    if (!Global_CVEnableEPT)
+    {
+        return;
+    }
     if (EnbaleHook)
     {
         FreeEPTHOOKPagePool();
