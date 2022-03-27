@@ -1,7 +1,7 @@
 # hvcv
 [64位VT基本框架更新中....]
 
-简单的64位VT cpu虚拟化，启用ept，利用EPT Violation实现内核API的inline hook，测试时Hook了NtTerminateProcess，对notepad进程的退出做了监控  
+简单的64位VT cpu虚拟化，启用ept，利用EPT Violation实现内核API的inline hook，RW和X分挂不同的页面，实现所谓的无痕HOOK，测试时Hook了NtTerminateProcess，对notepad进程的退出做了监控  
 使用尽量简单的语法，以及语言特性，主要是为了学习和理解
 
 
