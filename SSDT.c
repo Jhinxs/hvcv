@@ -28,7 +28,7 @@ ULONG64* GetSSDTBase()
 }
 ULONG64 GetNTAPIAddress() 
 {
-	int SyscallNumber = 0x002c;     //NtTerminateProcess = 0x0026;
+	int SyscallNumber = 0x002c;     //NtTerminateProcess = 0x002c;
 	ULONG64* ssdt = GetSSDTBase();
 	ULONG64 address = ((*(ULONG*)(*ssdt + SyscallNumber * 4)) >> 4) + *ssdt;
 	return address;
